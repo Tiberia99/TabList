@@ -1,6 +1,6 @@
 # TabList
 
-Official 1.0.9 version of this extension can be found here: https://chrome.google.com/webstore/detail/tablist/degjjfncecoliapmdalnecogigkhldam
+"Official" 1.0.9 version of this extension, *which does NOT include the changes in this repo,* can be found here: https://chrome.google.com/webstore/detail/tablist/degjjfncecoliapmdalnecogigkhldam
 
 
 **My Changes:**
