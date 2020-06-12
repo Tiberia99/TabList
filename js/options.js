@@ -1,10 +1,8 @@
 /**
  * @fileOverview TabList extension options handling file.
  * @author Arthur (ax330d) Gerkis
- * @version 1.0.5
+ * @version 1.0.9
  */
-
-// jshint esversion:6
 
 /**
  * Restores select box and checkbox state using the preferences stored in
@@ -15,10 +13,12 @@ document.addEventListener('DOMContentLoaded', function() {
     showBookmarks: false,
     showAllWindows: false,
     allowDebugLogs: false,
+    showPageHeader: true
   }, function(items) {
     document.getElementById('show-bookmarks').checked = items.showBookmarks;
     document.getElementById('show-all-windows').checked = items.showAllWindows;
-    document.getElementById('allow-debug-logs').checked = items.allowDebugLogs;
+    //document.getElementById('allow-debug-logs').checked = items.allowDebugLogs;
+    document.getElementById('show-page-header').checked = items.showPageHeader;
   });
 });
 
@@ -28,13 +28,15 @@ document.addEventListener('DOMContentLoaded', function() {
 window.onload = function() {
   ['show-bookmarks',
     'show-all-windows',
-    'allow-debug-logs'
+    //'allow-debug-logs',
+    'show-page-header'
   ].forEach(function(key) {
     document.getElementById(key).onclick = function(event) {
       chrome.storage.sync.set({
         showBookmarks: document.getElementById('show-bookmarks').checked,
         showAllWindows: document.getElementById('show-all-windows').checked,
-        allowDebugLogs: document.getElementById('allow-debug-logs').checked,
+        //allowDebugLogs: document.getElementById('allow-debug-logs').checked,
+        showPageHeader: document.getElementById('show-page-header').checked
       }, function() {
         // ...
       });
