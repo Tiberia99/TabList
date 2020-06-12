@@ -1,88 +1,161 @@
 /**
  * @fileOverview TabList extension main file.
- * @author Arthur (ax330d) Gerkis
- * @version 1.0.7
+ * @author Arthur (ax330d) Gerkis & Tiberia99
+ * @version 1.0.9.1
  */
 
-// jshint esversion:6
-
-// TODO: (ongoing) cleanup JS, see chrome://resources/js/cr.js, see google javascript code guidelines
-// TODO: (ongoing) cleanup CSS
-// TODO: (ongoing) check for errors and bugs
-
-// FIXME: track when some window is closed (title remains in list)
-// FIXME: get favicons from cache?
-
-// TODO: (future) add tab to bookmark
-// TODO: (future) close tab (but save in list!) and recover tab
-// TODO: (future) create option "Go to" (go to new tab)
-// TODO: (future) show "Other bookmarks"
-// TODO: (future) add context menus to bookmarks
-// TODO: (future) add localisation (ru, en)?
-// TODO: (future) maybe save list of tabs? How to do that securely?
-// TODO: (future) add tab groups (or colors?) Implement with context menus?
-// TODO: (future) add some animations?
-// TODO: (future) drag n drop (tabs reordering)
-// TODO: (future) move storage from sync to local? Make option to choose?
-// TODO: (future) show screenshots? (https://louisrli.github.io/blog/2013/01/16/javascript-canvas-screenshot/)
-// TODO: (future) quick tab view -- open tab and then return to page?
-// TODO: (future) mark if tab is audible
-// TODO: (future) make popup when some page updates (https://developer.chrome.com/extensions/notifications ?). Add to options
-
-
-var tl = tl || function() {
+window.onload = function() {
   'use strict';
 
   /**
    * Version of extension.
    */
-  let extensionVersion = '1.0.7';
+  const _extensionVersion = '1.0.9.1';
 
   /**
-   * Tabs counter. Starts from 1 because we aleardy have opened one tab.
+   * Tabs counter.
    */
-  let tabsCounter = 1;
-
-  /**
-   * Required to filter out ids which do not belong to current window.
-   */
-  let currentWindowId = null;
+  let _tabsCounter = 0;
 
   /**
    * Required to filter out ids which do not belong to current window.
    */
-  let listOfTabsIds = [];
+  let _currentWindowId = null;
+
+  /**
+   * Required to filter out ids which do not belong to current window.
+   */
+  let _listOfTabsIds = [];
 
   /**
    * Flag identifying if to show all windows.
    */
-  let doShowAllWindows = false;
+  let _doShowAllWindows = false;
 
   /**
    * Log all messages in debug mode.
    */
-  let isDebugMode = false;
+  let _isDebugMode = false;
 
   /**
    * Flag identifying if currently is discarding some tab.
    */
-  let isCurrentlyDiscarding = false;
+  let _isCurrentlyDiscarding = false;
 
   /**
-   * Previous tab identificator (used in tab discarding).
+   * Previous tab identifier (used in tab discarding).
    */
-  let previousTabId = -1;
+  let _previousTabId = -1;
+
+  /**
+   * Save Y position when we start to drag, later used to detect direction.
+   */
+  let _dragStartPositionY = -1;
+
+  /**
+   * Hash containing window id to tab id map.
+   */
+  let _windowToTabHash = {};
+
+  /**
+   * Drag-n-drop-related handlers.
+   */
+  let _dragHandlers = {
+
+    /**
+     * Handle dragstart event.
+     * @param {Object} event Event object.
+     */
+    dragStart: function(event) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', this.getAttribute('data-tab-id'));
+      _dragStartPositionY = event.pageY;
+    },
+
+    /**
+     * Handle dragover event.
+     * @param {Object} event Event object.
+     */
+    dragOver: function(event) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      return false;
+    },
+
+    /**
+     * Handle drop event.
+     * @param {Object} event Event object.
+     */
+    drop: function(event) {
+      event.stopPropagation();
+
+      let isMovingForward = false;
+      /** We need to handle case when tab is being moved forward. */
+      if (event.pageY > _dragStartPositionY) {
+        isMovingForward = true;
+      }
+
+      let windowIdBeingDroppedTo = -1;
+      let currentNodeIndex = -1;
+      let margin = _int(getComputedStyle(document.querySelector('.data-container')).marginBottom);
+      /** Get the next element to the drop position. */
+      let element = document.elementFromPoint(event.x, event.y + margin);
+
+      /** This is a normal drop to somewhere between containers, otherwise at the end. */
+      if (element.id !== 'footer' && element.tagName !== 'BODY') {
+        if (isMovingForward) {
+          currentNodeIndex = _int(element.parentNode.previousSibling.getAttribute('data-tab-index'));
+        } else {
+          currentNodeIndex = _int(element.parentNode.getAttribute('data-tab-index'));
+        }
+        if (isNaN(currentNodeIndex)) {
+          return false;
+        }
+
+        let closestElement = element.closest('[data-window-id]');
+        if (closestElement) {
+          windowIdBeingDroppedTo = _int(closestElement.getAttribute('data-window-id'));
+        }
+
+      } else {
+        /** This is a drop after last tab. */
+        let height = _int(getComputedStyle(document.querySelector('.data-container')).height);
+        let closestElement = document.elementFromPoint(event.x, event.y - height).closest('[data-window-id]');
+        if (closestElement) {
+          windowIdBeingDroppedTo = _int(closestElement.getAttribute('data-window-id'));
+        }
+
+        let allDataWindows = document.querySelectorAll(`[data-window-id="${windowIdBeingDroppedTo}"]`);
+        currentNodeIndex = _int(allDataWindows.item(allDataWindows.length - 1).getAttribute('data-tab-index'));
+      }
+
+      _dragStartPositionY = -1;
+      chrome.tabs.move(_int(event.dataTransfer.getData('text/plain')), {
+        index: currentNodeIndex,
+        windowId: windowIdBeingDroppedTo
+      });
+      return false;
+    }
+  };
 
   /**
    * Prints text to console.
    * @param {string} text Text to print in console.
    */
   function _log(text) {
-    if (!isDebugMode) {
+    if (!_isDebugMode) {
       return;
     }
 
-    console.trace('TabList: ' + text);
+    console.log(`TabList: ${text}`);
+  }
+
+  /**
+   * Parses anything to a number with base 10.
+   * @param {string} number String to convert to a number.
+   */
+  function _int(number) {
+    return parseInt(number, 10);
   }
 
   /**
@@ -91,21 +164,23 @@ var tl = tl || function() {
    */
   function _updateTab(tab) {
 
-    // If we are discarding some tab, then it will get new id, replace id.
-    if (isCurrentlyDiscarding) {
-      listOfTabsIds.splice(listOfTabsIds.indexOf(previousTabId), 1);
-      listOfTabsIds.push(tab.id);
-      let dataContainer = document.querySelector('[data-tab-id="' + previousTabId + '"]');
+    /** If we are discarding some tab, then it will get new id, replace id. */
+    if (_isCurrentlyDiscarding) {
+      _listOfTabsIds.splice(_listOfTabsIds.indexOf(_previousTabId), 1);
+      _listOfTabsIds.push(tab.id);
+      let dataContainer = document.querySelector(`[data-main-window-id="${tab.windowId}"] > [data-tab-id="${_previousTabId}"]`);
       if (dataContainer) {
         dataContainer.setAttribute('data-tab-id', tab.id);
+        dataContainer.setAttribute('data-tab-index', tab.index);
+        dataContainer.setAttribute('data-window-id', tab.windowId);
       }
     }
 
-    if (false === listOfTabsIds.includes(tab.id)) {
+    if (_listOfTabsIds.includes(tab.id) === false) {
       return;
     }
 
-    let dataContainer = document.querySelector('[data-tab-id="' + tab.id + '"]');
+    let dataContainer = document.querySelector(`[data-tab-id="${tab.id}"]`);
 
     let faviconContainerImage = dataContainer.querySelector('.favicon-container-image');
     faviconContainerImage.src = tab.favIconUrl || 'chrome://favicon';
@@ -113,9 +188,45 @@ var tl = tl || function() {
     dataContainer.querySelector('.text-container-title').innerText = tab.title;
     dataContainer.querySelector('.text-container-url').innerText = tab.url;
 
-    if (!tab.discarded && dataContainer.classList.contains('discarded-tab')) {
-      dataContainer.classList.remove('discarded-tab');
+    if (tab.url !== 'chrome://newtab/') {
+      dataContainer.classList.remove('hidden-tab');
+    } else {
+      dataContainer.classList.add('hidden-tab');
     }
+
+    {
+      let textContainer = dataContainer.querySelector('.text-container');
+
+      /** Update https status. */
+      /*let textContainerLock = dataContainer.querySelector('.text-container-lock');
+      if (textContainerLock) {
+        textContainerLock.remove();
+      }
+      if (tab.url.indexOf('https://') === 0) {
+        let textContainerLock = document.createElement('span');
+        textContainer.insertBefore(textContainerLock, textContainer.firstChild);
+        textContainerLock.innerText = 'lock';
+        textContainerLock.classList.add('text-container-lock');
+        textContainerLock.classList.add('material-icons');
+        textContainerLock.title = 'This site uses HTTPS protocol for secure communication.';
+      }*/
+
+      /** Update audible status. */
+      let textContainerAudible = dataContainer.querySelector('.text-container-audible');
+      if (textContainerAudible) {
+        textContainerAudible.remove();
+      }
+      if (tab.audible) {
+        let textContainerAudible = document.createElement('span');
+        textContainer.insertBefore(textContainerAudible, textContainer.firstChild);
+        textContainerAudible.innerText = 'volume_up';
+        textContainerAudible.classList.add('text-container-audible');
+        textContainerAudible.classList.add('material-icons');
+        textContainerAudible.title = 'Indicates that tab produced sound over the past couple of seconds.';
+      }
+    }
+
+    dataContainer.classList.remove('discarded-tab');
 
     if (tab.discarded) {
       dataContainer.classList.add('discarded-tab');
@@ -124,7 +235,7 @@ var tl = tl || function() {
 
   /**
    * Reloads tab.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    */
   function _reloadTab(tabId) {
     if (!tabId) {
@@ -135,13 +246,12 @@ var tl = tl || function() {
   }
 
   /**
-   * Dicards tab. You can of course use this:
+   * Discards tab. You can of course use this:
    * https://developers.google.com/web/updates/2015/09/tab-discarding
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    */
   function _discardTab(tabId) {
     if (!chrome.tabs.discard) {
-      _log('Unsupported feature (tabs.discard)!');
       return;
     }
 
@@ -149,22 +259,22 @@ var tl = tl || function() {
       return;
     }
 
-    isCurrentlyDiscarding = true;
-    previousTabId = tabId;
+    _isCurrentlyDiscarding = true;
+    _previousTabId = tabId;
 
     chrome.tabs.discard(tabId, function(tab) {
       if (tab.discarded) {
-        let dataContainer = document.querySelector('[data-tab-id="' + tab.id + '"]');
+        let dataContainer = document.querySelector(`[data-tab-id="${tab.id}"]`);
         dataContainer.classList.add('discarded-tab');
       }
-      isCurrentlyDiscarding = false;
-      previousTabId = -1;
+      _isCurrentlyDiscarding = false;
+      _previousTabId = -1;
     });
   }
 
   /**
    * Closes tab and removes tab box.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    * @param {boolean} [force=false] Whether to close tab.
    */
   function _removeTab(tabId, force = false) {
@@ -172,79 +282,100 @@ var tl = tl || function() {
       return;
     }
 
-    _updateTabCounter(--tabsCounter);
+    _updateTabCounter(--_tabsCounter);
 
-    const index = listOfTabsIds.indexOf(tabId);
-    listOfTabsIds.splice(index, 1);
+    const index = _listOfTabsIds.indexOf(tabId);
+    _listOfTabsIds.splice(index, 1);
 
     if (force) {
       chrome.tabs.remove(tabId);
     }
 
-    let box = document.getElementById('box');
-    box.removeChild(document.querySelector('[data-tab-id="' + tabId + '"]'));
+    let node = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (node) {
+      node.remove();
+    }
   }
 
   /**
    * Adds a new container for tab information.
    * @param {Object} tab The tab object.
-   * @param {Object} box The reference to div.
    */
-  function _addTab(tab, box) {
+  function _addTab(tab) {
 
-    _updateTabCounter(++tabsCounter);
+    _updateTabCounter(++_tabsCounter);
 
-    listOfTabsIds.push(tab.id);
+    _listOfTabsIds.push(tab.id);
 
-    // General data container
+    /** General data container. */
     let dataContainer = document.createElement('div');
     dataContainer.classList.add('data-container');
     dataContainer.setAttribute('data-tab-id', tab.id);
+    dataContainer.setAttribute('data-tab-index', tab.index);
+    dataContainer.setAttribute('data-window-id', tab.windowId);
+    dataContainer.addEventListener('dragstart', _dragHandlers.dragStart, false);
 
-    // If a new tab was opened from some tab, insert new container after opener
-    if (tab.openerTabId) {
-      let openerContainer = document.querySelector('[data-tab-id="' + tab.openerTabId + '"]');
-      // Fall back in case if something went wrong
-      if (!openerContainer) {
-        box.appendChild(dataContainer);
-      } else {
-        openerContainer.parentNode.insertBefore(dataContainer, openerContainer.nextSibling);
-      }
+    /** Dont show "newtab" tab. */
+    if (tab.url === 'chrome://newtab/') {
+      dataContainer.classList.add('hidden-tab');
+    }
+
+    if (tab.index === 0) {
+      _getWindowContainer(tab.windowId).appendChild(dataContainer);
     } else {
-      box.appendChild(dataContainer);
+      let openerContainer = document.querySelector(`[data-main-window-id="${tab.windowId}"] > [data-tab-index="${tab.index - 1}"]`);
+      openerContainer.parentNode.insertBefore(dataContainer, openerContainer.nextSibling);
     }
 
     if (tab.discarded) {
       dataContainer.classList.add('discarded-tab');
     }
 
-    // Work on favicon
+    /** Work on favicon. */
     {
       let faviconContainer = dataContainer.appendChild(document.createElement('div'));
       faviconContainer.classList.add('favicon-container');
 
       let faviconContainerImage = faviconContainer.appendChild(document.createElement('img'));
       faviconContainerImage.classList.add('favicon-container-image');
-      faviconContainerImage.src = tab.favIconUrl || 'chrome://favicon';
+      if (tab.incognito) {
+        faviconContainerImage.src = tab.favIconUrl || `chrome://favicon/size/64@1x/${tab.url}`;
+      } else {
+        faviconContainerImage.src = `chrome://favicon/size/64@1x/${tab.url}`;
+      }
       faviconContainerImage.title = 'Switch to this tab';
       faviconContainerImage.onclick = function(event) {
-        chrome.tabs.update(_getTabId(this), {
+        chrome.tabs.update(tab.id, {
           selected: true
         });
       };
     }
 
-    // Work on text data
+    /** Work on text data. */
     {
       let textContainer = dataContainer.appendChild(document.createElement('div'));
       textContainer.classList.add('text-container');
+      textContainer.title = tab.title;
+      textContainer.onclick = function(event) {
+        chrome.tabs.update(tab.id, {
+          selected: true
+        });
+      };
 
-      if (tab.url.indexOf('https://') === 0) {
+      /*if (tab.url.indexOf('https://') === 0) {
         let textContainerLock = textContainer.appendChild(document.createElement('span'));
         textContainerLock.innerText = 'lock';
         textContainerLock.classList.add('text-container-lock');
         textContainerLock.classList.add('material-icons');
         textContainerLock.title = 'This site uses HTTPS protocol for secure communication.';
+      }*/
+
+      if (tab.audible) {
+        let textContainerAudible = textContainer.appendChild(document.createElement('span'));
+        textContainerAudible.innerText = 'volume_up';
+        textContainerAudible.classList.add('text-container-audible');
+        textContainerAudible.classList.add('material-icons');
+        textContainerAudible.title = 'Indicates that tab produced sound over the past couple of seconds.';
       }
 
       let textContainerTitle = textContainer.appendChild(document.createElement('span'));
@@ -258,12 +389,26 @@ var tl = tl || function() {
       textContainerUrl.innerText = tab.url;
     }
 
-    // Work on options container
+    /** Work on options container. */
     {
       let optionsContainer = dataContainer.appendChild(document.createElement('div'));
       optionsContainer.classList.add('options-container');
 
-      // Reload tab
+      /** Set up drag tab icon. */
+      let optionsContainerDrag = optionsContainer.appendChild(document.createElement('span'));
+      optionsContainerDrag.innerText = 'drag_handle';
+      optionsContainerDrag.classList.add('options-container-drag');
+      optionsContainerDrag.classList.add('material-icons');
+      optionsContainerDrag.title = 'Drag tab';
+      optionsContainerDrag.addEventListener('dragover', _dragHandlers.dragOver, false);
+      optionsContainerDrag.onmouseover = function(event) {
+        dataContainer.setAttribute('draggable', 'true');
+      };
+      optionsContainerDrag.onmouseleave = function(event) {
+        dataContainer.removeAttribute('draggable');
+      };
+
+      /* Set up reload tab icon. */
       let optionsContainerReload = optionsContainer.appendChild(document.createElement('span'));
       optionsContainerReload.innerText = 'refresh';
       optionsContainerReload.classList.add('options-container-reload');
@@ -273,7 +418,7 @@ var tl = tl || function() {
         _reloadTab(_getTabId(this));
       };
 
-      // Discard tab memory
+      /** Set up discard tab memory icon. */
       let optionsContainerDiscard = optionsContainer.appendChild(document.createElement('span'));
       optionsContainerDiscard.innerText = 'memory';
       optionsContainerDiscard.classList.add('options-container-discard');
@@ -283,7 +428,7 @@ var tl = tl || function() {
         _discardTab(_getTabId(this));
       };
 
-      // Closes tab
+      /** Set up close tab icon. */
       let optionsContainerCross = optionsContainer.appendChild(document.createElement('span'));
       optionsContainerCross.innerText = 'close';
       optionsContainerCross.classList.add('options-container-cross');
@@ -296,15 +441,15 @@ var tl = tl || function() {
   }
 
   /**
-   * Gets current tab identificator for container attribute.
+   * Gets current tab identifier for container attribute.
    * @param {Object} node Node.
-   * @returns {number}
+   * @returns {number} Tab ID.
    */
   function _getTabId(node) {
     let containerDiv = node.parentNode.parentNode;
     let tabId = null;
     if (containerDiv) {
-      tabId = parseInt(containerDiv.getAttribute('data-tab-id'));
+      tabId = _int(containerDiv.getAttribute('data-tab-id'));
     }
     return tabId;
   }
@@ -315,7 +460,7 @@ var tl = tl || function() {
    */
   function _updateTabCounter(counter) {
     let text = ' open tab';
-    if (counter > 1) {
+    if (counter % 10 !== 1 && counter !== 11) {
       text += 's';
     }
     let numberOfTabs = document.getElementById('number-of-tabs');
@@ -328,25 +473,19 @@ var tl = tl || function() {
   /**
    * Updates current window ID.
    */
-  function _updateCurrentWindowId() {
-    // Get id of current window because we need only tabs for current one
+  function _update_currentWindowId() {
+    /** Get id of current window because we need only tabs for current one. */
     chrome.windows.getCurrent({}, function(window) {
-      currentWindowId = window.id;
+      _currentWindowId = window.id;
     });
   }
 
   /**
-   * Iterates over bookmakrs and creates menus.
-   *
-   * Source: http://codepen.io/philhoyt/pen/ujHzd
-   *
-   * @param {number} bookmarkId Identificator of bookmark.
+   * Iterates over bookmarks and creates menus.
+   * @param {number} bookmarkId identifier of bookmark.
    * @param {number} parentNode Reference to the parent node.
    */
   function _iterateBookmarksAndAppendToMenu(bookmarkId, parentNode) {
-
-    bookmarkId = bookmarkId + '';
-
     chrome.bookmarks.getChildren(bookmarkId, function(bookmarks) {
       if (!bookmarks.length) {
         return;
@@ -357,19 +496,21 @@ var tl = tl || function() {
       bookmarks.forEach(function(bookmark) {
 
         let li = ul.appendChild(document.createElement('li'));
-        if ('1' === bookmarkId) {
+        if (_int(bookmarkId) === 1) {
           li.classList.add('bookmark-container');
         }
 
-        // FIXME: use span instead of a?
         let link = li.appendChild(document.createElement('a'));
-        link.href = '#';
-        link.innerText = bookmark.title.substr(0, 24);
-        if (bookmark.title.length > 24) {
-          link.innerText += '...';
+        if (bookmark.url) {
+          link.href = bookmark.url;
+          link.title = bookmark.title;
         }
+        if (!bookmark.title) {
+          link.classList.add('no-title');
+        }
+        link.innerText = bookmark.title || '(no title)';
 
-        // This is folder, continue recursively
+        /** If this is folder, continue recursively. */
         if (!bookmark.url) {
           li.classList.add('folder');
           li.onmouseover = function() {
@@ -379,12 +520,12 @@ var tl = tl || function() {
           return;
         }
 
-        // This is just link
-        li.setAttribute('style', 'background-image: -webkit-image-set(' +
-          'url("chrome://favicon/size/16@1x/' + bookmark.url + '") 1x, ' +
-          'url("chrome://favicon/size/16@2x/' + bookmark.url + '") 2x);');
+        /** This is just link. */
+        li.setAttribute('style', `background-image: -webkit-image-set(url("chrome://favicon/size/16@1x/${bookmark.url}") 1x, url("chrome://favicon/size/16@2x/${bookmark.url}") 2x);`);
         li.classList.add('link');
+
         link.onclick = function(event) {
+          event.preventDefault();
           chrome.tabs.create({
             active: false,
             url: bookmark.url
@@ -392,7 +533,6 @@ var tl = tl || function() {
         };
 
       }); /** bookmarks */
-
     }); /** getChildren */
   }
 
@@ -421,169 +561,122 @@ var tl = tl || function() {
     if (!node) {
       return;
     }
+
     let dimensions = node.getBoundingClientRect();
     if (dimensions.left + dimensions.width > window.innerWidth) {
       let parentDimensions = node.parentNode.getBoundingClientRect();
       if (node.parentNode.classList.contains('bookmark-container')) {
-        node.setAttribute('style', 'left: -' + (dimensions.width - parentDimensions.width) + 'px');
+        node.setAttribute('style', `left: -${dimensions.width - parentDimensions.width}px`);
       } else {
-        node.setAttribute('style', 'left: -' + dimensions.width + 'px');
+        node.setAttribute('style', `left: -${dimensions.width}px`);
       }
     }
+  }
+
+  /**
+   * Returns windows container corresponding to the given id.
+   * @param {integer} windowId ID of the window.
+   * @returns {Object} Container element.
+   */
+  function _getWindowContainer(windowId) {
+    if (!Object.keys(_windowToTabHash).includes(windowId)) {
+      let windowFrame = document.getElementById('box').appendChild(document.createElement('div'));
+      if (_doShowAllWindows) {
+        let header = windowFrame.appendChild(document.createElement('h2'));
+        header.innerText = `Window (ID ${windowId})`;
+        header.classList.add('window-header');
+        windowFrame.classList.add('window-frame');
+      }
+      windowFrame.setAttribute('data-main-window-id', windowId);
+      return windowFrame;
+    }
+
+    return document.querySelector(`[data-main-window-id="${windowId}"]`);
+  }
+
+  /**
+   * Re-set tab container index attributes.
+   */
+  function _refreshTabIndexes(windowId = _currentWindowId) {
+    chrome.tabs.query({
+      windowId: windowId
+    }, function(tabs) {
+      for (let i = 0; i < tabs.length; i++) {
+        let element = document.querySelector(`[data-main-window-id="${windowId}"] > [data-tab-id="${tabs[i].id}"]`);
+        element.setAttribute('data-tab-index', tabs[i].index);
+      }
+    });
   }
 
   /**
    * Creates list of tabs.
    */
   function _makeListOfTabs() {
-
-    let currentTabId = null;
-    chrome.tabs.getCurrent(function(tab) {
-      currentTabId = tab.id;
-    });
-
     chrome.tabs.query({
       url: '<all_urls>'
     }, function(tabs) {
 
-      let windowsArray = {};
       tabs.forEach(function(tab) {
 
-        // Filter out other windows
-        if (currentWindowId !== tab.windowId && !doShowAllWindows) {
+        /** Filter out other windows. */
+        if (_currentWindowId !== tab.windowId && !_doShowAllWindows) {
           return;
         }
 
-        if (false === tab.windowId in windowsArray) {
-          windowsArray[tab.windowId] = [];
+        if (tab.windowId in _windowToTabHash === false) {
+          _windowToTabHash[tab.windowId] = [];
         }
 
-        // Dont show this tab
-        if (tab.id === currentTabId) {
-          return;
-        }
-
-        windowsArray[tab.windowId].push(tab);
-      });
-
-      let box = document.getElementById('box');
-      let firstWindow = true;
-
-      Object.keys(windowsArray).forEach(function(windowId) {
-
-        if (doShowAllWindows) {
-          let separator = box.appendChild(document.createElement('div'));
-          separator.classList.add('separator');
-          if (!firstWindow) {
-            separator.classList.add('separator-cut');
-          }
-          if (firstWindow) {
-            firstWindow = false;
-          }
-          separator.innerText = 'Window (ID ' + windowId + ')';
-        }
-
-        let tabs = windowsArray[windowId];
-        tabs.forEach(function(tab) {
-          _addTab(tab, box);
-        });
+        _addTab(tab);
+        _windowToTabHash[tab.windowId].push(tab.id);
       });
     });
 
-    _updateTabCounter(tabsCounter);
-  }
-
-  /**
-   * Triggers on window.onload event.
-   */
-  function onload() {
-
-    _log('onload event');
-
-    doShowAllWindows = false;
-    tabsCounter = 1;
-    currentWindowId = null;
-    listOfTabsIds = [];
-
-    document.getElementById('footer-version').innerText = 'TabList v ' + extensionVersion;
-    document.getElementById('footer-about').onclick = function(event) {
-      event.preventDefault();
-      document.getElementById('about').classList.remove('hidden');
-    };
-    document.getElementById('footer-help').onclick = function(event) {
-      event.preventDefault();
-      document.getElementById('help').classList.remove('hidden');
-    };
-    document.querySelector('#help-close').onclick = function(event) {
-      document.getElementById('help').classList.add('hidden');
-    };
-    document.querySelector('#about-close').onclick = function(event) {
-      document.getElementById('about').classList.add('hidden');
-    };
-
-    _updateCurrentWindowId();
-
-    chrome.storage.sync.get({
-      showBookmarks: false,
-      showAllWindows: false,
-      allowDebugLogs: false,
-    }, function(items) {
-
-      if (items.showBookmarks) {
-        _loadBookmarks();
-      }
-
-      if (items.showAllWindows) {
-        doShowAllWindows = true;
-      }
-
-      if (items.allowDebugLogs) {
-        isDebugMode = true;
-      }
-
-      _makeListOfTabs();
-    });
+    _updateTabCounter(_tabsCounter);
   }
 
   /**
    * Triggers on chrome.tabs.onRemoved event.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    */
   function onRemoved(tabId) {
 
-    _log('global onRemoved ' + tabId);
+    _log(`global onRemoved ${tabId}`);
 
-    if (false === listOfTabsIds.includes(tabId) && !doShowAllWindows) {
+    if (_listOfTabsIds.includes(tabId) === false && !_doShowAllWindows) {
       return;
     }
 
-    _log('local onRemoved ' + tabId);
+    _log(`local onRemoved ${tabId}`);
 
     _removeTab(tabId);
+    _refreshTabIndexes();
   }
 
   /**
    * Triggers on chrome.tabs.onDetached event.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    */
   function onDetached(tabId) {
 
-    _log('global onDetached ' + tabId);
+    _log(`global onDetached ${tabId}`);
 
     chrome.tabs.getCurrent(function(tab) {
       if (tab.id === tabId) {
         _log('Detached current tab');
-        onload();
+        // FIXME: this is ugly.
+        location.reload();
       }
     });
 
-    if (false === listOfTabsIds.includes(tabId) && !doShowAllWindows) {
+    if (_listOfTabsIds.includes(tabId) === false && !_doShowAllWindows) {
       return;
     }
 
-    _log('local onDetached ' + tabId);
+    _log(`local onDetached ${tabId}`);
 
     _removeTab(tabId);
+    _refreshTabIndexes();
   }
 
   /**
@@ -592,27 +685,25 @@ var tl = tl || function() {
    */
   function onAttached(tab) {
 
-    _log('global onAttached ' + tab.id);
+    _log(`global onAttached ${tab.id}`);
 
-    _updateCurrentWindowId();
+    _update_currentWindowId();
 
-    // Filter out other windows
-    if (currentWindowId !== tab.windowId) {
-      if ('undefined' === typeof tab.id) {
-        _log('Foreign tab attached, need to refresh layout');
-        //window.dispatchEvent(new Event('load'));
-        onload();
+    /** Filter out other windows. */
+    if (_currentWindowId !== tab.windowId) {
+      // FIXME: this all is ugly.
+      if (typeof tab.id === 'undefined') {
+        _log('Tab from other window is attached, need to refresh layout');
+        location.reload();
       }
-      if (!doShowAllWindows) {
+      if (!_doShowAllWindows) {
         return;
       }
     }
 
-    _log('local onAttached ' + tab.id);
+    _log(`local onAttached ${tab.id}`);
 
-    let box = document.getElementById('box');
-
-    _addTab(tab, box);
+    _addTab(tab);
   }
 
   /**
@@ -621,77 +712,125 @@ var tl = tl || function() {
    */
   function onCreated(tab) {
 
-    _log('global onCreated ' + tab.id);
+    _log(`global onCreated ${tab.id}`);
 
-    // Filter out other windows
-    if (currentWindowId !== tab.windowId && !doShowAllWindows) {
+    /** Filter out other windows. */
+    if (_currentWindowId !== tab.windowId && !_doShowAllWindows) {
       return;
     }
 
-    _log('local onCreated ' + tab.id);
+    _log(`local onCreated ${tab.id}`);
 
-    let box = document.getElementById('box');
-
-    _addTab(tab, box);
+    _addTab(tab);
   }
 
   /**
    * Triggers on chrome.tabs.onUpdated event.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    * @param {Object} changeInfo The info about changes.
    * @param {Object} tab The tab object.
    */
   function onUpdated(tabId, changeInfo, tab) {
 
-    _log('global onUpdated ' + tabId);
+    _log(`global onUpdated ${tabId}`);
 
-    // Filter out other windows
-    if (currentWindowId !== tab.windowId && !doShowAllWindows) {
+    /** Filter out other windows. */
+    if (_currentWindowId !== tab.windowId && !_doShowAllWindows) {
       return;
     }
 
-    _log('local onUpdated ' + tab.id);
+    _log(`local onUpdated ${tabId}`);
 
     _updateTab(tab);
   }
 
   /**
    * Triggers on chrome.tabs.onMoved event.
-   * @param {number} tabId Tab identificator.
+   * @param {number} tabId Tab identifier.
    * @param {Object} moveInfo The info about changes.
    */
   function onMoved(tabId, moveInfo) {
-    _log('global onMoved ' + tabId);
 
-    // Filter out other windows
-    if (currentWindowId !== moveInfo.windowId && !doShowAllWindows) {
+    _log(`global onMoved ${tabId}`);
+
+    /** Filter out other windows. */
+    if (_currentWindowId !== moveInfo.windowId && !_doShowAllWindows) {
       return;
     }
 
-    _log('local onMoved ' + tabId);
+    _log(`local onMoved ${tabId}`);
 
-    // Simply refresh layout, user wont see it as he is moving tabs.
-    onload();
+    /** Move nodes where needed. */
+    let toIndexElement = document.querySelector(`[data-main-window-id="${moveInfo.windowId}"] > [data-tab-index="${moveInfo.toIndex}"]`);
+    if (moveInfo.toIndex > moveInfo.fromIndex) {
+      toIndexElement = toIndexElement.nextSibling;
+    }
+    let fromIndexElement = document.querySelector(`[data-main-window-id="${moveInfo.windowId}"] > [data-tab-index="${moveInfo.fromIndex}"]`);
+    if (fromIndexElement && toIndexElement) {
+      toIndexElement.parentNode.insertBefore(fromIndexElement, toIndexElement);
+    }
+    if (fromIndexElement && !toIndexElement) {
+      let parentElement = document.querySelector(`[data-main-window-id="${moveInfo.windowId}"]`);
+      parentElement.insertBefore(fromIndexElement, null);
+    }
+
+    _refreshTabIndexes(moveInfo.windowId);
   }
 
-  return {
-    onload: onload,
+  chrome.storage.onChanged.addListener(function() {
+    location.reload();
+  });
+  chrome.tabs.onRemoved.addListener(onRemoved);
+  chrome.tabs.onDetached.addListener(onDetached);
+  chrome.tabs.onAttached.addListener(onAttached);
+  chrome.tabs.onCreated.addListener(onCreated);
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  chrome.tabs.onMoved.addListener(onMoved);
 
-    onRemoved: onRemoved,
-    onDetached: onDetached,
-    onAttached: onAttached,
-    onCreated: onCreated,
-    onUpdated: onUpdated,
-    onMoved: onMoved
-  };
-}();
+  (function() {
+    _log('just loaded');
 
+    _doShowAllWindows = false;
+    _tabsCounter = 0;
+    _currentWindowId = null;
+    _listOfTabsIds = [];
 
-chrome.tabs.onRemoved.addListener(tl.onRemoved);
-chrome.tabs.onDetached.addListener(tl.onDetached);
-chrome.tabs.onAttached.addListener(tl.onAttached);
-chrome.tabs.onCreated.addListener(tl.onCreated);
-chrome.tabs.onUpdated.addListener(tl.onUpdated);
-chrome.tabs.onMoved.addListener(tl.onMoved);
+    document.body.addEventListener('dragover', _dragHandlers.dragOver, false);
+    document.body.addEventListener('drop', _dragHandlers.drop, false);
 
-window.onload = tl.onload;
+    document.getElementById('footer-version').innerText = `TabList v. ${_extensionVersion}`;
+
+    ['about', 'help'].forEach(function(name) {
+      document.querySelector(`#footer-${name}`).onclick = function(event) {
+        event.preventDefault();
+        document.getElementById(name).classList.remove('hidden');
+      };
+      document.querySelector(`#${name}-close`).onclick = function(event) {
+        document.getElementById(name).classList.add('hidden');
+      };
+    });
+
+    _update_currentWindowId();
+
+    chrome.storage.sync.get({
+      showBookmarks: false,
+      showAllWindows: false,
+      allowDebugLogs: false,
+      showPageHeader: true
+    }, function(items) {
+
+      if (items.showBookmarks) {
+        _loadBookmarks();
+      }
+
+      _doShowAllWindows = items.showAllWindows || false;
+      _isDebugMode = items.allowDebugLogs || false;
+
+      if (!items.showPageHeader) {
+        document.querySelector('#header').classList.add('hidden');
+      }
+
+      _makeListOfTabs();
+    });
+  })();
+};
