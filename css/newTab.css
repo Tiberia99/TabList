@@ -74,15 +74,21 @@ body {
 
 div.data-container {
     background-color: #fefefe;
-    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .05), 0 1px 4px 0 rgba(0, 0, 0, .08), 0 3px 1px -2px rgba(0, 0, 0, .2);
+    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .06), 0 1px 6px 0 rgba(0, 0, 0, .06), 0 2px 1px -4px rgba(0, 0, 0, .06);
     margin: 20px;
     word-wrap: break-word;
     display: flex;
+    border-radius: 3px;
+}
+
+div.data-container:hover {
+    box-shadow: 0 2px 10px 0 rgba(0, 0, 0, .1), 0 1px 8px 0 rgba(0, 0, 0, .1), 2px 3px 4px -5px rgba(0, 0, 0, .1);
 }
 
 div.favicon-container {
     cursor: pointer;
     padding: 15px;
+    width: 32px;
 }
 
 div.text-container {
@@ -93,27 +99,18 @@ div.text-container {
 }
 
 div.options-container {
-    padding: 15px 0px 15px 15px;
+    padding: 15px;
     font-size: 2.2em;
     vertical-align: middle;
     text-align: center;
     display: none;
-    width: 140px;
 }
 
 div.data-container:hover > div.options-container {
     display: flex;
-    background-color: #ddd;
+    background-color: whitesmoke;
     align-items: center;
-}
-
-div.separator-cut {
-    border-top: 2px dashed #ccc;    
-}
-
-div.separator {
-    padding: 25px 25px 10px 25px;
-    font-size: 1.6em;
+    border-radius: 0 3px 3px 0;
 }
 
 .options-container span {
@@ -121,7 +118,7 @@ div.separator {
     vertical-align: middle;
     text-align: center;
     padding: 4px;
-    color: #666;
+    color: #888;
 }
 
 .options-container span:hover {
@@ -149,14 +146,14 @@ div#help, div#about {
 div#help-container, div#about-container {
     background-color: white;
     position: fixed;
-    width: 600px;
     top: 30%;
     left: 50%;
     margin-left: -300px;
     margin-top: -100px;
-    padding: 20px;
     border-radius: 3px;
     font-size: 1.2em;
+    width: 600px;
+    padding: 20px 20px 34px 20px;
 }
 
 div#help-close, div#about-close {
@@ -170,9 +167,36 @@ div#help-close, div#about-close {
 
 div#bookmarks-container {
     background-color: white;
-    border-bottom: 1px solid #D4E6F1;
     display: inline-block;
     width: 100%;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .06), 0 1px 6px 0 rgba(0, 0, 0, .06), 0 2px 1px -4px rgba(0, 0, 0, .06)
+}
+
+div.hidden-tab {
+    display: none;
+}
+
+div.window-frame {
+    border: 2px dashed #ddd;
+    margin: 10px;
+    border-radius: 3px;
+    background-color: #eee;
+}
+
+h2.window-header {
+    padding: 0 0 0 20px;
+    color: #999;
+    font-size: 2.0em;
+    font-family: monospace;
+}
+
+.bookmark-container a {
+    color: #333;
+}
+
+.bookmark-container a.no-title {
+    color: #999;
 }
 
 div#header {
@@ -198,9 +222,13 @@ span#thin {
     font-weight: 100;
 }
 
-span#discard-sign, span#close-sign, span#reload-sign {
+span#discard-sign, span#close-sign, span#reload-sign, span#drag-sign {
     color: #999;
     vertical-align: middle;
+}
+
+span#close-sign:hover {
+    color: indianred;
 }
 
 #help ul {
@@ -221,7 +249,7 @@ li.bookmark-container {
 }
 
 li.bookmark-container:hover {
-    border: 1px solid #ABB2B9;
+    border: 1px solid gainsboro;
 }
 
 span.text-container-title {
@@ -241,6 +269,12 @@ span.text-container-lock {
     vertical-align: text-top;
 }
 
+span.text-container-audible {
+    font-size: 1.2em;
+    padding: 0 5px 0 0;
+    vertical-align: text-top;
+}
+
 span#info {
     font-weight: 100;
 }
@@ -251,7 +285,7 @@ img.favicon-container-image {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 .discarded-tab {
@@ -262,15 +296,13 @@ img.favicon-container-image {
     background-image: -webkit-image-set(url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABvElEQVR4AaWRsY8NURTGf+fO3aeWtRGNiGILohAklkS2WL1SFKJQKtT+ANGotlUotVoiIYJCRKVRiJaIWOzb92buOZ83mRs72cIWfslvcu79cr9TjEnCVtcvnz538QYj3r999VAfnz9lHzJA//jm9avXAAQY8GDI9y2wE1du3V0+tLK+cenCMTP+8uzl688AhjEm1XMgvn759iKvLB9cu3fn9hoSA46lho3zZ490UUCiC2jlyIVHEC6wCfc3N9sM8H3rJ/LCQACJCNEXmMDDhoIQ3utBSgcQRi4LtrYLZh0JwEByXCJioVjoSIbqnQii9EWly+GKzkQqjpkhQFqIiACTKAFSIKgFoAQRKLtE6UDFwQyoBRJB3SjQaMYAOa5QDgU/ZoVJOKKmdQotjMAwQsMd9esJLMJykFI7n1HUjWLGW2sptV4ARJrjlixLkX+1hSa63X+ucZFwoKFigIJoGiQtZQl2ZtCoQyQCSAbhkBheCsiAqklQZEiQUaidT1mKKYGh3SUYQAIBwUDN8QwolGc70+0njx+9IUHi38SeoTH/bcdPnjn66cO7tj+PTHsUECO99/DqqYlJ4n/4A28FNzVErXrkAAAAAElFTkSuQmCC) 1x, url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABKElEQVR4Xs2XPUrEUBRGz5OMe4gi7mAYEN2DhbgAwcZCBe1dgMIswDYW7kEECxegzTALEEREa0snuZ+QoGGqpAh8HgIX3rvF4f7wSJKEk4wGzqa3u0AB5B0CH8DReLJ9P58908X1xWE/AVAxnuzkdJPPZ08FsAYargKScnrR5kqDCtCTNneI8UknVzcC2NxY53uxoA+roxGvb+8MQTq+LHR6sI8QzQeS2iiQEiLqGH9nWsoLtfmxdNeei98ISNw9PJJJ4uXzCweSGoEqwi0gr0BZGSsQtYBwEBKZQlQmAYV/CPG3QApKWwXiX1RAvgq0WxC+LYgQZQgH8beGlbMFGN8CmhZQRbhbIPNzLKdAMs5AEpkCIrCggLR3PhVGErCFEfvP6Qpe/AI/AeMfTKUCbnkAAAAASUVORK5CYII=) 2x);
     background-size: 16px;
     background-repeat: no-repeat;
-    background-position-y: 4px;
-    background-position-x: 2px;
+    background-position: left center;
 }
 
 .link {
     background-size: 16px;
     background-repeat: no-repeat;
-    background-position-y: 4px;
-    background-position-x: 2px;
+    background-position: left center;
 }
 
 /**
@@ -286,7 +318,6 @@ img.favicon-container-image {
 }
 
 #bookmarks-menu ul {
-    float: left;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -294,56 +325,54 @@ img.favicon-container-image {
 }
 
 #bookmarks-menu ul a {
-    color: #333;
     display: block;
     line-height: 2.0em;
     padding: 0 5px 0 22px;
     text-decoration: none;
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
 }
 
 #bookmarks-menu ul li {
     position: relative;
+    background-origin: content-box;
+    padding-left: 3px;
 }
 
 #bookmarks-menu ul li:hover {
-    background-position-x: 2px;
-    background-position-y: 4px;
     background-repeat: no-repeat;
     background-size: 16px;
-    z-index: 999;
+    z-index: 1000;
 }
 
-#bookmarks-menu ul li:hover>ul {
+#bookmarks-menu ul li:hover > ul {
     border-radius: 2px;
-    box-shadow: 1px 1px 2px 2px #ccc;
+    box-shadow: 1px 1px 2px 2px #ddd;
     display: block;
     margin: -1px;
-    padding: 3px;
-    z-index: 999;
+    z-index: 1000;
 }
 
 #bookmarks-menu ul ul {
     background: #fff;
     display: none;
-    left: 0;
-    padding: 0;
     position: absolute;
-    top: 100%;
 }
 
 #bookmarks-menu ul ul li {
-    float: none;
     min-height: 28px;
-    width: 200px;
+    width: 250px;
+    background-position: left center;
 }
 
 #bookmarks-menu ul ul a {
-    background-position-x: 2px;
-    background-position-y: 4px;
     background-repeat: no-repeat;
     background-size: 16px;
     line-height: 120%;
-    padding: 7px 5px 7px 25px;
+    padding: 7px 0 0 22px;
 }
 
 #bookmarks-menu ul ul ul {

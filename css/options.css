@@ -47,8 +47,14 @@ div#box {
     height: auto;
     margin: auto;
     padding: 10px 25px 25px 25px;
-    width: 40%;
+    width: 50%;
     margin-top: 20px;
+}
+
+.meta-info {
+    font-size: 0.75em;
+    color: #aaa;
+    font-style: italic;
 }
 
 label {
